@@ -1,0 +1,4 @@
+[install]
+# a single hoisted node_modules, as Yarn v1 laid it out: the isolated linker
+# duplicates packages that eslint plugins and type augmentations need once
+linker = "hoisted"

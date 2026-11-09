@@ -19,12 +19,12 @@ const PACKAGES_DIR = path.resolve(__dirname, "../packages");
  * Returns the arguments for the release script.
  *
  * Usage examples:
- * - yarn release --help                          -> prints this help message
- * - yarn release                                 -> publishes `@excalidraw` packages with "test" tag and "-[hash]" version suffix
- * - yarn release --tag=test                      -> same as above
- * - yarn release --tag=next                      -> publishes `@excalidraw` packages with "next" tag and version "-[hash]" suffix
- * - yarn release --tag=next --non-interactive    -> skips interactive prompts (runs on CI/CD), otherwise same as above
- * - yarn release --tag=latest --version=0.19.0   -> publishes `@excalidraw` packages with "latest" tag and version "0.19.0" & prepares changelog for the release
+ * - bun run release --help                          -> prints this help message
+ * - bun run release                                 -> publishes `@excalidraw` packages with "test" tag and "-[hash]" version suffix
+ * - bun run release --tag=test                      -> same as above
+ * - bun run release --tag=next                      -> publishes `@excalidraw` packages with "next" tag and version "-[hash]" suffix
+ * - bun run release --tag=next --non-interactive    -> skips interactive prompts (runs on CI/CD), otherwise same as above
+ * - bun run release --tag=latest --version=0.19.0   -> publishes `@excalidraw` packages with "latest" tag and version "0.19.0" & prepares changelog for the release
  *
  * @returns [tag, version, nonInteractive]
  */
@@ -41,11 +41,11 @@ const getArguments = () => {
   --non-interactive                              -> (optional) disables interactive prompts`);
 
       console.info(`\nUsage examples:
-  - yarn release                                 -> publishes \`@excalidraw\` packages with "test" tag and "-[hash]" version suffix
-  - yarn release --tag=test                      -> same as above
-  - yarn release --tag=next                      -> publishes \`@excalidraw\` packages with "next" tag and version "-[hash]" suffix
-  - yarn release --tag=next --non-interactive    -> skips interactive prompts (runs on CI/CD), otherwise same as above
-  - yarn release --tag=latest --version=0.19.0   -> publishes \`@excalidraw\` packages with "latest" tag and version "0.19.0" & prepares changelog for the release`);
+  - bun run release                                 -> publishes \`@excalidraw\` packages with "test" tag and "-[hash]" version suffix
+  - bun run release --tag=test                      -> same as above
+  - bun run release --tag=next                      -> publishes \`@excalidraw\` packages with "next" tag and version "-[hash]" suffix
+  - bun run release --tag=next --non-interactive    -> skips interactive prompts (runs on CI/CD), otherwise same as above
+  - bun run release --tag=latest --version=0.19.0   -> publishes \`@excalidraw\` packages with "latest" tag and version "0.19.0" & prepares changelog for the release`);
 
       process.exit(0);
     }
@@ -172,15 +172,15 @@ const askToCommit = (tag, nextVersion) => {
 };
 
 const buildPackages = () => {
-  console.info("Running yarn install...");
-  execSync(`yarn --frozen-lockfile`, { stdio: "inherit" });
+  console.info("Running bun install...");
+  execSync(`bun install --frozen-lockfile`, { stdio: "inherit" });
 
   console.info("Removing existing build artifacts...");
-  execSync(`yarn rm:build`, { stdio: "inherit" });
+  execSync(`bun run rm:build`, { stdio: "inherit" });
 
   for (const packageName of PACKAGES) {
     console.info(`Building "@excalidraw/${packageName}"...`);
-    execSync(`yarn run build:esm`, {
+    execSync(`bun run build:esm`, {
       cwd: path.resolve(PACKAGES_DIR, packageName),
       stdio: "inherit",
     });
@@ -213,7 +213,7 @@ const askToPublish = (tag, version) => {
 
 const publishPackages = (tag, version) => {
   for (const packageName of PACKAGES) {
-    execSync(`yarn publish --tag ${tag}`, {
+    execSync(`bun publish --tag ${tag}`, {
       cwd: path.resolve(PACKAGES_DIR, packageName),
       stdio: "inherit",
     });

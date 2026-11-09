@@ -16,7 +16,7 @@ services:
     volumes:
       - ./:/opt/node_app/app:delegated
       - ./package.json:/opt/node_app/package.json
-      - ./yarn.lock:/opt/node_app/yarn.lock
+      - ./bun.lock:/opt/node_app/bun.lock
       - notused:/opt/node_app/app/node_modules
 
 volumes:

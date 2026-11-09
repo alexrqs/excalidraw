@@ -12,6 +12,12 @@ If you prefer Yarn over npm, use this command to install the Excalidraw utils pa
 yarn add @excalidraw/utils
 ```
 
+With Bun, install the package with this command:
+
+```bash
+bun add @excalidraw/utils
+```
+
 ## API
 
 ### `serializeAsJSON`

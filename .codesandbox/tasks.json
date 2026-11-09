@@ -3,7 +3,7 @@
   "setupTasks": [
     {
       "name": "Install Dependencies",
-      "command": "yarn install"
+      "command": "bun install"
     }
   ],
 
@@ -11,22 +11,22 @@
   "tasks": {
     "build": {
       "name": "Build",
-      "command": "yarn build",
+      "command": "bun run build",
       "runAtStart": false
     },
     "fix": {
       "name": "Fix",
-      "command": "yarn fix",
+      "command": "bun run fix",
       "runAtStart": false
     },
     "prettier": {
       "name": "Prettify",
-      "command": "yarn prettier",
+      "command": "bun run prettier",
       "runAtStart": false
     },
     "start": {
       "name": "Start Excalidraw",
-      "command": "yarn start",
+      "command": "bun run start",
       "runAtStart": true,
       "preview": {
         "port": 3000
@@ -34,14 +34,14 @@
     },
     "test": {
       "name": "Run Tests",
-      "command": "yarn test",
+      "command": "bun run test",
       "runAtStart": false
     },
     "install-deps": {
       "name": "Install Dependencies",
-      "command": "yarn install",
+      "command": "bun install",
       "restartOn": {
-        "files": ["yarn.lock"],
+        "files": ["bun.lock"],
         "branch": false,
         "resume": false
       }

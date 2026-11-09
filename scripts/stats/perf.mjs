@@ -7,7 +7,7 @@
  * context (cold HTTP cache) on a throttled fast-desktop connection — the
  * conditions of Excalidraw+'s own runs, so the apps' numbers compare.
  *
- * `--compare` (`yarn stats:compare`) measures two builds on this machine,
+ * `--compare` (`bun run stats:compare`) measures two builds on this machine,
  * alternating them, and prints a table of their differences: this checkout's
  * production build — built and served locally — or `--url`, against `--base`,
  * a url (staging by default) or a commit, checked out and built the same way.
@@ -17,9 +17,9 @@
  *
  *   node scripts/stats/perf.mjs --url http://localhost:3000 --iterations 3
  *   node scripts/stats/perf.mjs --scenario oss-pan-zoom --iterations 1
- *   yarn stats:compare [--iterations 10] [--out diff.csv]
- *   yarn stats:compare --base master --out perf.json
- *   yarn stats:compare --url http://localhost:3000 --base https://excalidraw.com
+ *   bun run stats:compare [--iterations 10] [--out diff.csv]
+ *   bun run stats:compare --base master --out perf.json
+ *   bun run stats:compare --url http://localhost:3000 --base https://excalidraw.com
  */
 
 import { execFileSync, spawn } from "node:child_process";
@@ -625,8 +625,12 @@ function checkOut(revision) {
   });
   git("worktree", "add", "--quiet", "--detach", dir, sha);
   runQuietly(
-    "yarn",
-    ["install", "--frozen-lockfile", "--prefer-offline"],
+    "bun",
+    // commits from before the move to Bun only have a yarn.lock, which Bun
+    // migrates — so there's no bun.lock to freeze
+    fs.existsSync(path.join(dir, "bun.lock"))
+      ? ["install", "--frozen-lockfile", "--prefer-offline"]
+      : ["install", "--prefer-offline"],
     // no git hooks for the worktree
     { cwd: dir, env: { ...process.env, HUSKY: "0" } },
     `Installing the dependencies of ${label} failed`,
@@ -657,7 +661,7 @@ async function serveLocalBuild({ dir, sha, label }) {
         VITE_APP_ENABLE_ESLINT: "false",
       },
     },
-    `Building ${label} failed (\`yarn build:app\` shows why)`,
+    `Building ${label} failed (\`bun run build:app\` shows why)`,
   );
 
   const port = await getFreePort();

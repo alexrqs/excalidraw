@@ -1,17 +1,21 @@
+FROM --platform=${BUILDPLATFORM} oven/bun:1.3.14 AS bun
+
 FROM --platform=${BUILDPLATFORM} node:24@sha256:8530f76a96d88820d288761f022e318970dda93d01536919fbc16076b7983e63 AS build
 
 WORKDIR /opt/node_app
+
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 
 COPY . .
 
 # do not ignore optional dependencies:
 # Error: Cannot find module @rollup/rollup-linux-x64-gnu
-RUN --mount=type=cache,target=/root/.cache/yarn \
-    npm_config_target_arch=${TARGETARCH} yarn --frozen-lockfile --network-timeout 600000
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    npm_config_target_arch=${TARGETARCH} bun install --frozen-lockfile
 
 ARG NODE_ENV=production
 
-RUN npm_config_target_arch=${TARGETARCH} yarn build:app:docker
+RUN npm_config_target_arch=${TARGETARCH} bun run build:app:docker
 
 FROM nginx:stable-alpine-slim@sha256:2c605dbeab79a6b2a63340474fe58119d0ef95bdc4b1f41df0aa689659b3d13b
 

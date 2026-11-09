@@ -14,10 +14,14 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20.x
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
       - name: Install and build
         run: |
-          yarn --frozen-lockfile
-          yarn build:app
+          bun install --frozen-lockfile
+          bun run build:app
         env:
           CI: true
       - name: Install Sentry

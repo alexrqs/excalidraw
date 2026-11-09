@@ -17,3 +17,9 @@ With PNPM, similarly install the package with this command:
 ```bash
 pnpm add @excalidraw/element
 ```
+
+With Bun, install the package with this command:
+
+```bash
+bun add @excalidraw/element
+```

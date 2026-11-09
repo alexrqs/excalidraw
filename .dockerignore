@@ -10,7 +10,7 @@
 !packages/
 !scripts/
 !tsconfig.json
-!yarn.lock
+!bun.lock
 
 # keep (sub)sub directories at the end to exclude from explicit included
 # e.g. ./packages/excalidraw/{dist,node_modules}
