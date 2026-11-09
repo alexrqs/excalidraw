@@ -47,10 +47,11 @@ export const hasStrokeStyle = (type: ElementOrToolType) =>
   type === "diamond" ||
   type === "arrow" ||
   type === "line" ||
-  type === "autoshape";
+  type === "autoshape" ||
+  type === "freedraw";
 
 export const hasRoughness = (type: ElementOrToolType) =>
-  hasStrokeStyle(type) || type === "stickynote";
+  (hasStrokeStyle(type) && type !== "freedraw") || type === "stickynote";
 
 export const hasFreedrawMode = (type: ElementOrToolType) => type === "freedraw";
 

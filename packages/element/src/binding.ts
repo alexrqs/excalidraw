@@ -653,7 +653,43 @@ export const getBindingStrategyForDraggingBindingElementEndpoints = (
   );
 };
 
+/**
+ * With edge-to-edge arrows on, a binding being made sits on the shape's
+ * outline, aimed at its center, wherever on the shape the end was dropped.
+ */
+const bindToEdges = (
+  arrow: NonDeleted<ExcalidrawArrowElement>,
+  strategies: { start: BindingStrategy; end: BindingStrategy },
+  elementsMap: NonDeletedSceneElementsMap,
+  appState: AppState,
+): { start: BindingStrategy; end: BindingStrategy } => {
+  if (!appState.currentItemArrowBindToEdges || isElbowArrow(arrow)) {
+    return strategies;
+  }
+  const toEdge = (strategy: BindingStrategy): BindingStrategy =>
+    strategy.mode && strategy.element
+      ? {
+          mode: "orbit",
+          element: strategy.element,
+          focusPoint: elementCenterPoint(strategy.element, elementsMap),
+        }
+      : strategy;
+  return { start: toEdge(strategies.start), end: toEdge(strategies.end) };
+};
+
 const getBindingStrategyForDraggingBindingElementEndpoints_simple = (
+  ...args: Parameters<
+    typeof getBindingStrategyForDraggingBindingElementEndpoints_unaligned
+  >
+) =>
+  bindToEdges(
+    args[0],
+    getBindingStrategyForDraggingBindingElementEndpoints_unaligned(...args),
+    args[4],
+    args[6],
+  );
+
+const getBindingStrategyForDraggingBindingElementEndpoints_unaligned = (
   arrow: NonDeleted<ExcalidrawArrowElement>,
   draggingPoints: PointsPositionUpdates,
   scenePointerX: number,

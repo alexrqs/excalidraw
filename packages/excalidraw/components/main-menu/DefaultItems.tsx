@@ -17,6 +17,7 @@ import {
   actionToggleShowHints,
   actionToggleStats,
   actionToggleTheme,
+  actionToggleWarmMode,
   actionToggleZenMode,
 } from "../../actions";
 import { actionToggleViewMode } from "../../actions/actionToggleViewMode";
@@ -320,6 +321,29 @@ export const ToggleTheme = (
   );
 };
 ToggleTheme.displayName = "ToggleTheme";
+
+/** an amber tint over the editor, on top of either theme */
+export const ToggleWarmMode = () => {
+  const { t } = useI18n();
+  const appState = useUIAppState();
+  const actionManager = useExcalidrawActionManager();
+
+  return (
+    <DropdownMenuItemCheckbox
+      checked={appState.warmModeEnabled}
+      shortcut={getShortcutFromShortcutName("toggleWarmMode")}
+      onSelect={(event) => {
+        // stays open, like the theme switch, to see the change
+        event.preventDefault();
+        actionManager.executeAction(actionToggleWarmMode);
+      }}
+      data-testid="toggle-warm-mode"
+    >
+      {t("buttons.warmMode")}
+    </DropdownMenuItemCheckbox>
+  );
+};
+ToggleWarmMode.displayName = "ToggleWarmMode";
 
 export const ChangeCanvasBackground = () => {
   const { t } = useI18n();

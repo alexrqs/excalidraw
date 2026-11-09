@@ -20,6 +20,7 @@ import {
   actionLink,
   actionToggleSearchMenu,
   actionToggleTheme,
+  actionToggleWarmMode,
 } from "../../actions";
 import {
   actionCopyElementLink,
@@ -423,6 +424,7 @@ function CommandPaletteInner({
 
       const additionalCommands: CommandPaletteItem[] = [
         actionToCommand(actionToggleTheme, DEFAULT_CATEGORIES.app),
+        actionToCommand(actionToggleWarmMode, DEFAULT_CATEGORIES.app),
         {
           label: t("toolBar.library"),
           category: DEFAULT_CATEGORIES.app,

@@ -262,6 +262,7 @@ const getRelevantAppStateProps = (
   selectedLinearElement: appState.selectedLinearElement,
   multiElement: appState.multiElement,
   newElement: appState.newElement,
+  freedrawStabilizerString: appState.freedrawStabilizerString,
   isBindingEnabled: appState.isBindingEnabled,
   isMidpointSnappingEnabled: appState.isMidpointSnappingEnabled,
   gridModeEnabled: appState.gridModeEnabled,

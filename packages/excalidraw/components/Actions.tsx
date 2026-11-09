@@ -171,11 +171,17 @@ export const SelectedShapeActions = ({
 
       {predicates.freedrawMode && renderAction("changeFreedrawMode")}
 
+      {/* steadies strokes while drawing, so only shown for the active tool */}
+      {predicates.freedrawMode &&
+        appState.activeTool.type === "freedraw" &&
+        renderAction("changeFreedrawStabilizer")}
+
       {predicates.sloppiness && <>{renderAction("changeSloppiness")}</>}
 
       {predicates.roundness && <>{renderAction("changeRoundness")}</>}
 
       {predicates.arrowType && <>{renderAction("changeArrowType")}</>}
+      {predicates.arrowType && renderAction("changeArrowBindToEdges")}
 
       {predicates.text && (
         <>
@@ -290,6 +296,9 @@ const CombinedShapeProperties = ({
                 */
                 predicates.freedrawMode && renderAction("changeFreedrawMode")
               }
+              {predicates.freedrawMode &&
+                appState.activeTool.type === "freedraw" &&
+                renderAction("changeFreedrawStabilizer")}
               {predicates.strokeStyle && (
                 <>{renderAction("changeStrokeStyle")}</>
               )}

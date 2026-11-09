@@ -22,6 +22,12 @@ const laserPointerCursorDataURL_darkMode = `data:${
   `${laserPointerCursorSVG_tag}${laserPointerCursorBackgroundSVG}${laserPointerCursorIconSVG}</svg>`,
 )}`;
 
+// a dark ring on a white halo, legible on any canvas background in both themes
+const FREEDRAW_CURSOR_SIZE = 16;
+const freedrawCursorDataURL = `data:${MIME_TYPES.svg},${encodeURIComponent(
+  `<svg viewBox="0 0 16 16" width="${FREEDRAW_CURSOR_SIZE}" height="${FREEDRAW_CURSOR_SIZE}" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="4" stroke="#fff" stroke-width="3"/><circle cx="8" cy="8" r="4" stroke="#1b1b1f" stroke-width="1.25"/></svg>`,
+)}`;
+
 const createBucketFillCursorDataURL = (color: string) => {
   const paths = bucketFillIconSvgPaths
     .map(
@@ -143,6 +149,13 @@ export class AppCursor {
           ? laserPointerCursorDataURL_lightMode
           : laserPointerCursorDataURL_darkMode;
       this.set(`url(${url}), auto`);
+    } else if (activeTool.type === "freedraw") {
+      // the hotspot is the center of the ring, where the stroke is drawn
+      this.set(
+        `url(${freedrawCursorDataURL}) ${FREEDRAW_CURSOR_SIZE / 2} ${
+          FREEDRAW_CURSOR_SIZE / 2
+        }, crosshair`,
+      );
     } else if (!["image", "custom"].includes(activeTool.type)) {
       this.set(CURSOR_TYPE.CROSSHAIR);
       // do nothing if image tool is selected which suggests there's

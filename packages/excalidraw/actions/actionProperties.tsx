@@ -37,6 +37,9 @@ import {
 import {
   bindBindingElement,
   calculateFixedPointForElbowArrowBinding,
+  elementCenterPoint,
+  isBindableElement,
+  updateBoundArrow,
   updateBoundElements,
 } from "@excalidraw/element";
 
@@ -85,6 +88,7 @@ import type {
   Arrowhead,
   ElementsMap,
   ExcalidrawBindableElement,
+  ExcalidrawArrowElement,
   ExcalidrawElement,
   ExcalidrawFreeDrawElement,
   ExcalidrawLinearElement,
@@ -108,6 +112,7 @@ import { ColorPicker } from "../components/ColorPicker/ColorPicker";
 import { FontPicker } from "../components/FontPicker/FontPicker";
 import { IconPicker } from "../components/IconPicker";
 import { Range } from "../components/Range";
+import { MAX_STABILIZER_STRING_LENGTH } from "../freedrawStabilizer";
 import {
   ArrowheadArrowIcon,
   ArrowheadBarIcon,
@@ -144,6 +149,8 @@ import {
   ArrowheadDiamondOutlineIcon,
   fontSizeIcon,
   sharpArrowIcon,
+  arrowBindToEdgesIcon,
+  arrowBindToPointIcon,
   roundArrowIcon,
   elbowArrowIcon,
   ArrowheadCardinalityExactlyOneIcon,
@@ -904,6 +911,31 @@ export const actionChangeFreedrawMode = register<StrokeVariability>({
       </fieldset>
     );
   },
+});
+
+export const actionChangeFreedrawStabilizer = register<number>({
+  name: "changeFreedrawStabilizer",
+  label: "labels.stabilizer",
+  trackEvent: false,
+  perform: (elements, appState, value) => {
+    // a drawing preference, not a property of the strokes already drawn
+    return {
+      appState: { ...appState, currentItemFreedrawStabilizer: value },
+      captureUpdate: CaptureUpdateAction.EVENTUALLY,
+    };
+  },
+  PanelComponent: ({ appState, updateData }) => (
+    <Range
+      label={t("labels.stabilizer")}
+      value={appState.currentItemFreedrawStabilizer}
+      onChange={updateData}
+      min={0}
+      max={MAX_STABILIZER_STRING_LENGTH}
+      step={5}
+      minLabel={t("labels.stabilizer_off")}
+      testId="freedraw-stabilizer"
+    />
+  ),
 });
 
 export const actionChangeStrokeStyle = register<
@@ -2069,6 +2101,7 @@ export const actionChangeArrowProperties = register({
       <div className="selected-shape-actions">
         {renderAction("changeArrowhead")}
         {renderAction("changeArrowType")}
+        {renderAction("changeArrowBindToEdges")}
       </div>
     );
   },
@@ -2319,4 +2352,98 @@ export const actionChangeArrowType = register<keyof typeof ARROW_TYPE>({
       </fieldset>
     );
   },
+});
+
+/** Whether the arrow's bound ends sit on the outlines, aimed center to center. */
+const isArrowBoundToEdges = (arrow: ExcalidrawArrowElement) => {
+  const bindings = [arrow.startBinding, arrow.endBinding].filter(Boolean);
+  return (
+    bindings.length > 0 &&
+    bindings.every(
+      (binding) =>
+        binding!.mode === "orbit" &&
+        Math.abs(binding!.fixedPoint[0] - 0.5) < 0.001 &&
+        Math.abs(binding!.fixedPoint[1] - 0.5) < 0.001,
+    )
+  );
+};
+
+export const actionChangeArrowBindToEdges = register<boolean>({
+  name: "changeArrowBindToEdges",
+  label: "labels.arrowBinding",
+  trackEvent: false,
+  perform: (elements, appState, value, app) => {
+    const elementsMap = app.scene.getNonDeletedElementsMap();
+
+    for (const arrow of app.scene.getSelectedElements(appState)) {
+      if (!isArrowElement(arrow) || isElbowArrow(arrow)) {
+        continue;
+      }
+      for (const startOrEnd of ["start", "end"] as const) {
+        const binding = arrow[`${startOrEnd}Binding`];
+        const bound = binding && elementsMap.get(binding.elementId);
+        if (!bound || !isBindableElement(bound)) {
+          continue;
+        }
+        // on: aim at the center, from the outline. off: stay put, but
+        // anchored where the end touches now rather than at the center
+        bindBindingElement(
+          arrow,
+          bound,
+          "orbit",
+          startOrEnd,
+          app.scene,
+          appState.zoom,
+          value
+            ? elementCenterPoint(bound, elementsMap)
+            : LinearElementEditor.getPointAtIndexGlobalCoordinates(
+                arrow,
+                startOrEnd === "start" ? 0 : -1,
+                elementsMap,
+              ),
+        );
+      }
+      updateBoundArrow(arrow, app.scene, app.scene.getNonDeletedElementsMap());
+    }
+
+    return {
+      elements: app.scene.getElementsIncludingDeleted(),
+      appState: { ...appState, currentItemArrowBindToEdges: value },
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    };
+  },
+  PanelComponent: ({ elements, appState, updateData, app }) => (
+    <fieldset>
+      <legend>{t("labels.arrowBinding")}</legend>
+      <div className="buttonList">
+        <RadioSelection
+          group="arrowbinding"
+          options={[
+            {
+              value: false,
+              text: t("labels.arrowBinding_point"),
+              icon: arrowBindToPointIcon,
+              testId: "arrow-binding-point",
+            },
+            {
+              value: true,
+              text: t("labels.arrowBinding_edges"),
+              icon: arrowBindToEdgesIcon,
+              testId: "arrow-binding-edges",
+            },
+          ]}
+          value={getFormValue(
+            elements,
+            app,
+            (element) =>
+              isArrowElement(element) && isArrowBoundToEdges(element),
+            (element) => isArrowElement(element) && !isElbowArrow(element),
+            (hasSelection) =>
+              hasSelection ? null : appState.currentItemArrowBindToEdges,
+          )}
+          onChange={(value) => updateData(value)}
+        />
+      </div>
+    </fieldset>
+  ),
 });

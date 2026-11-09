@@ -234,6 +234,7 @@ export type InteractiveCanvasAppState = Readonly<
     selectedLinearElement: AppState["selectedLinearElement"];
     multiElement: AppState["multiElement"];
     newElement: AppState["newElement"];
+    freedrawStabilizerString: AppState["freedrawStabilizerString"];
     isBindingEnabled: AppState["isBindingEnabled"];
     isMidpointSnappingEnabled: AppState["isMidpointSnappingEnabled"];
     gridModeEnabled: AppState["gridModeEnabled"];
@@ -457,6 +458,16 @@ export interface AppState {
   currentItemStrokeStyle: ExcalidrawElement["strokeStyle"];
   currentItemRoughness: number;
   currentItemStrokeVariability: StrokeVariability;
+  /** freedraw pulled-string stabilizer's string length in screen px, 0 = off */
+  currentItemFreedrawStabilizer: number;
+  /**
+   * The stabilizer's string while drawing (scene coords): the brush the
+   * stroke follows, and the pointer pulling it.
+   */
+  freedrawStabilizerString: {
+    brush: { x: number; y: number };
+    pointer: { x: number; y: number };
+  } | null;
   currentItemOpacity: number;
   currentItemFontFamily: FontFamilyValues;
   currentItemFontSize: number;
@@ -466,6 +477,8 @@ export interface AppState {
   currentHoveredFontFamily: FontFamilyValues | null;
   currentItemRoundness: StrokeRoundness;
   currentItemArrowType: "sharp" | "round" | "elbow";
+  /** new arrows bind outline to outline, aimed shape center to center */
+  currentItemArrowBindToEdges: boolean;
   viewBackgroundColor: string;
   scrollX: number;
   scrollY: number;
@@ -517,6 +530,8 @@ export interface AppState {
     duration?: number;
   } | null;
   zenModeEnabled: boolean;
+  /** an amber tint over the whole editor, easier on the eyes at night */
+  warmModeEnabled: boolean;
   theme: Theme;
   /** grid cell px size */
   gridSize: number;

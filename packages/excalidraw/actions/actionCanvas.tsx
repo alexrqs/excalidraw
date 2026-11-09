@@ -23,6 +23,7 @@ import { Tooltip } from "../components/Tooltip";
 import {
   MoonIcon,
   SunIcon,
+  WarmModeIcon,
   TrashIcon,
   zoomAreaIcon,
   ZoomInIcon,
@@ -427,6 +428,26 @@ export const actionZoomToFit = register({
     event.shiftKey &&
     !event.altKey &&
     !event[KEYS.CTRL_OR_CMD],
+});
+
+export const actionToggleWarmMode = register({
+  name: "toggleWarmMode",
+  label: (_, appState) =>
+    appState.warmModeEnabled ? "buttons.warmModeOff" : "buttons.warmMode",
+  keywords: ["warm", "night", "light", "amber", "sepia", "eyes", "mode"],
+  icon: WarmModeIcon,
+  viewMode: true,
+  trackEvent: { category: "canvas" },
+  perform: (_, appState) => ({
+    appState: { ...appState, warmModeEnabled: !appState.warmModeEnabled },
+    captureUpdate: CaptureUpdateAction.EVENTUALLY,
+  }),
+  checked: (appState) => appState.warmModeEnabled,
+  keyTest: (event) =>
+    !event[KEYS.CTRL_OR_CMD] &&
+    event.altKey &&
+    event.shiftKey &&
+    event.code === CODES.W,
 });
 
 export const actionToggleTheme = register<AppState["theme"]>({

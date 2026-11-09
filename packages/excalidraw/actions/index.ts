@@ -15,6 +15,8 @@ export {
   actionChangeFillStyle,
   actionChangeSloppiness,
   actionChangeFreedrawMode,
+  actionChangeFreedrawStabilizer,
+  actionChangeArrowBindToEdges,
   actionChangeOpacity,
   actionChangeFontSize,
   actionChangeFontFamily,
@@ -31,6 +33,7 @@ export {
   actionResetZoom,
   actionZoomToFit,
   actionToggleTheme,
+  actionToggleWarmMode,
 } from "./actionCanvas";
 
 export { actionFinalize } from "./actionFinalize";

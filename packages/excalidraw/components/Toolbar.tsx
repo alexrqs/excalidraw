@@ -3,11 +3,18 @@ import { useState } from "react";
 
 import { KEYS } from "@excalidraw/common";
 
+import { actionToggleGridMode, actionToggleObjectsSnapMode } from "../actions";
+import { getShortcutFromShortcutName } from "../actions/shortcuts";
 import { useTunnels } from "../context/tunnels";
 import { t } from "../i18n";
 
-import { useEditorInterface, useStylesPanelMode } from "./App";
+import {
+  useEditorInterface,
+  useExcalidrawActionManager,
+  useStylesPanelMode,
+} from "./App";
 import { HintViewer } from "./HintViewer";
+import { IconButton } from "./IconButton";
 import { Island } from "./Island";
 import { LockButton } from "./LockButton";
 import { PenModeButton } from "./PenModeButton";
@@ -17,11 +24,13 @@ import {
   drawShapeToolIcon,
   EmbedIcon,
   frameToolIcon,
+  gridIcon,
   ImageIcon,
   LassoIcon,
   laserPointerToolIcon,
   bucketFillIcon,
   MagicIcon,
+  magnetIcon,
   mermaidLogoIcon,
   DotsIcon,
 } from "./icons";
@@ -239,6 +248,7 @@ export const Toolbar = ({
 }) => {
   const editorInterface = useEditorInterface();
   const isCompactStylesPanel = useStylesPanelMode() === "compact";
+  const actionManager = useExcalidrawActionManager();
 
   const activeTool = appState.activeTool;
   const toolProps = { app, activeTool };
@@ -278,6 +288,59 @@ export const Toolbar = ({
               title={t("toolBar.lock")}
               // the active tool — including its lock state — is host-controlled
               disabled={app.props.activeTool != null}
+            />
+            {/* same toggle as the menu's "Snap to objects"; hidden when the
+                host app controls snapping */}
+            {app.props.objectsSnapModeEnabled === undefined && (
+              <IconButton
+                className="ToolIcon__snap"
+                type="toggle"
+                icon={magnetIcon}
+                checked={appState.objectsSnapModeEnabled}
+                title={`${t("buttons.objectsSnapMode")} — Alt+S`}
+                aria-label={t("buttons.objectsSnapMode")}
+                data-testid="toolbar-snap"
+                onSelect={() =>
+                  actionManager.executeAction(actionToggleObjectsSnapMode)
+                }
+              />
+            )}
+            {app.props.gridModeEnabled === undefined && (
+              <IconButton
+                className="ToolIcon__grid"
+                type="toggle"
+                icon={gridIcon}
+                checked={appState.gridModeEnabled}
+                title={`${t(
+                  "labels.toggleGrid",
+                )} — ${getShortcutFromShortcutName("gridMode")}`}
+                aria-label={t("labels.toggleGrid")}
+                data-testid="toolbar-grid"
+                onSelect={() =>
+                  actionManager.executeAction(actionToggleGridMode)
+                }
+              />
+            )}
+            {/* the "more tools" draw-to-shape tool, kept in sight: on turns
+                rough sketches into clean shapes, off goes back to selecting */}
+            <IconButton
+              className="ToolIcon__autoshape"
+              type="toggle"
+              icon={drawShapeToolIcon}
+              checked={activeTool.type === "autoshape"}
+              disabled={isToolButtonDisabled(app, "autoshape")}
+              title={`${t("toolBar.autoshape")} — ${getToolShortcut(
+                "autoshape",
+              )}`}
+              aria-label={t("toolBar.autoshape")}
+              data-testid="toolbar-autoshape-toggle"
+              onSelect={() =>
+                app.setActiveTool(
+                  activeTool.type === "autoshape"
+                    ? { type: appState.preferredSelectionTool.type }
+                    : { type: "autoshape" },
+                )
+              }
             />
 
             <div

@@ -11,6 +11,7 @@ export type ShortcutName =
   | SubtypeOf<
       ActionName,
       | "toggleTheme"
+      | "toggleWarmMode"
       | "loadScene"
       | "clearCanvas"
       | "cut"
@@ -58,6 +59,7 @@ export type ShortcutName =
 
 const shortcutMap: Record<ShortcutName, string[]> = {
   toggleTheme: [getShortcutKey("Shift+Alt+D")],
+  toggleWarmMode: [getShortcutKey("Shift+Alt+W")],
   saveScene: [getShortcutKey("CtrlOrCmd+S")],
   loadScene: [getShortcutKey("CtrlOrCmd+O")],
   clearCanvas: [getShortcutKey("CtrlOrCmd+Delete")],

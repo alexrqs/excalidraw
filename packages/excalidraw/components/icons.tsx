@@ -508,6 +508,23 @@ export const SunIcon = createIcon(
   { ...modifiedTablerIconProps, strokeWidth: 1.5 },
 );
 
+// sun-low (tabler)
+export const WarmModeIcon = createIcon(
+  <g>
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+    <path d="M4 12h.01" />
+    <path d="M12 4v.01" />
+    <path d="M20 12h.01" />
+    <path d="M12 20v.01" />
+    <path d="M6.31 6.31l-.01 -.01" />
+    <path d="M17.71 6.31l-.01 -.01" />
+    <path d="M17.7 17.7l.01 .01" />
+    <path d="M6.3 17.7l.01 .01" />
+  </g>,
+  tablerIconProps,
+);
+
 export const HamburgerMenuIcon = createIcon(
   <g strokeWidth="1.5">
     <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
@@ -2403,6 +2420,28 @@ export const sharpArrowIcon = createIcon(
     <path stroke="none" d="M0 0h24v24H0z" fill="none" />
     <path d="M6 18l12 -12" />
     <path d="M18 10v-4h-4" />
+  </g>,
+  tablerIconProps,
+);
+
+// arrow bound to a point inside the target: it ends within the shape
+export const arrowBindToPointIcon = createIcon(
+  <g>
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <rect x="13" y="6" width="8" height="12" rx="1.5" />
+    <path d="M3 12h13" />
+    <path d="M14 10l2 2l-2 2" />
+  </g>,
+  tablerIconProps,
+);
+
+// arrow bound edge to edge: it stops short of the target's outline
+export const arrowBindToEdgesIcon = createIcon(
+  <g>
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <rect x="15" y="6" width="6" height="12" rx="1.5" />
+    <path d="M3 12h9" />
+    <path d="M10 10l2 2l-2 2" />
   </g>,
   tablerIconProps,
 );

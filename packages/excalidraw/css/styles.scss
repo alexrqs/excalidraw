@@ -49,6 +49,65 @@ body.excalidraw-cursor-resize * {
 
   font-family: var(--ui-font);
 
+  // warm mode: a soft parchment palette — warm near-black ink on parchment,
+  // beige lines, a muted green accent — on screen only (exports keep their
+  // real colors)
+  &.excalidraw--warm-mode {
+    // the drawing, color-mapped by the SVG filters App renders: black to
+    // warm ink, white to parchment, everything between scaled to match
+    // the static and in-progress canvases; not the selection overlay
+    .excalidraw__canvas:not(.interactive) {
+      filter: url(#excalidraw-warm-light);
+    }
+
+    &:not(.theme--dark) {
+      --color-on-surface: #2d2b26;
+      --text-primary-color: #2d2b26;
+      --popup-text-color: #2d2b26;
+      --input-label-color: #5c584f;
+      --keybinding-color: #9a958a;
+      --color-gray-40: #a8a397;
+
+      --default-bg-color: #f4f0e8;
+      --input-bg-color: #faf8f3;
+      --input-hover-bg-color: #efeadf;
+      --input-border-color: #e0dacd;
+      --island-bg-color: #faf8f3;
+      --island-bg-color-alt: #faf8f3;
+      --popup-secondary-bg-color: #efeadf;
+      --dialog-border-color: #e6e0d3;
+      --color-surface-lowest: #faf8f3;
+      --color-surface-mid: #f4f0e8;
+      --color-surface-low: #efeadf;
+      --color-surface-high: #ebe5d8;
+      --color-border-outline-variant: #e0dacd;
+
+      --color-primary: #3e6b4a;
+      --color-primary-darker: #345b3f;
+      --color-primary-darkest: #2a4a33;
+      --color-primary-hover: #345b3f;
+      --color-primary-light: #e1e9dd;
+      --color-primary-light-darker: #d4dfcf;
+      --color-brand-hover: #345b3f;
+      --color-brand-active: #2a4a33;
+      --color-surface-primary-container: #e1e9dd;
+      --color-on-primary-container: #1f3a26;
+      --color-slider-track: #d4dfcf;
+      --color-logo-icon: #3e6b4a;
+      --color-logo-text: #2d2b26;
+    }
+
+    &.theme--dark {
+      .excalidraw__canvas:not(.interactive) {
+        filter: url(#excalidraw-warm-dark);
+      }
+
+      --color-on-surface: #e8e2d6;
+      --text-primary-color: #e8e2d6;
+      --popup-text-color: #e8e2d6;
+    }
+  }
+
   position: relative;
   overflow: hidden;
   color: var(--text-primary-color);

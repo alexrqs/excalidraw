@@ -197,6 +197,7 @@ import {
   bindOrUnbindBindingElement,
   mutateElement,
   getElementBounds,
+  getLockedLinearCursorAlignSize,
   doBoundsIntersect,
   isPointInElement,
   getSnapOutlineMidPoint,
@@ -296,6 +297,10 @@ import { getShortcutFromShortcutName } from "../actions/shortcuts";
 import { trackEvent } from "../analytics";
 import { getDefaultAppState, isEraserActive } from "../appState";
 import {
+  getStabilizerStringLength,
+  pullStabilizerBrushAlong,
+} from "../freedrawStabilizer";
+import {
   copyTextToSystemClipboard,
   parseDataTransferEvent,
 } from "../clipboard";
@@ -385,6 +390,7 @@ import { AppBucketFill } from "./App.bucketFill";
 import { AppToolDrag, TOOL_DRAG_PREVIEW_OPACITY } from "./App.toolDrag";
 import { AppCursor } from "./App.cursor";
 import { AppDrawShape } from "./App.drawshape";
+import { AppHandwriting } from "./App.handwriting";
 import { AppDuplicate } from "./App.duplicate";
 import { AppFlowchart } from "./App.flowchart";
 import { AppModifiers } from "./App.modifiers";
@@ -463,6 +469,7 @@ import type {
 } from "../types";
 import type { RoughCanvas } from "roughjs/bin/canvas";
 import type { Action, ActionResult } from "../actions/types";
+import type { StabilizerPoint } from "../freedrawStabilizer";
 
 const AppContext = React.createContext<AppClassProperties>(null!);
 const AppPropsContext = React.createContext<AppProps>(null!);
@@ -543,6 +550,42 @@ export const useExcalidrawAppState = () =>
   useContext(ExcalidrawAppStateContext);
 export const useExcalidrawSetAppState = () =>
   useContext(ExcalidrawSetAppStateContext);
+/**
+ * Warm mode's color maps for the canvas, as CSS can only reference SVG
+ * filters in the document: each channel is mapped linearly so black lands
+ * on warm ink and white on parchment (or, in dark mode, on warm charcoal and
+ * warm off-white), keeping every color between in proportion.
+ */
+const WarmModeFilters = () => {
+  const map = (
+    id: string,
+    dark: [number, number, number],
+    light: [number, number, number],
+  ) => (
+    <filter id={id} colorInterpolationFilters="sRGB">
+      <feComponentTransfer>
+        {(["R", "G", "B"] as const).map((channel, i) => {
+          const Func = `feFunc${channel}` as const;
+          return (
+            <Func
+              key={channel}
+              type="linear"
+              intercept={dark[i] / 255}
+              slope={(light[i] - dark[i]) / 255}
+            />
+          );
+        })}
+      </feComponentTransfer>
+    </filter>
+  );
+  return (
+    <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden>
+      {map("excalidraw-warm-light", [45, 43, 38], [244, 240, 232])}
+      {map("excalidraw-warm-dark", [34, 33, 30], [232, 226, 214])}
+    </svg>
+  );
+};
+
 export const useExcalidrawActionManager = () =>
   useContext(ExcalidrawActionManagerContext);
 /**
@@ -723,9 +766,24 @@ class App extends React.Component<AppProps, AppState> {
   lastPointerMoveEvent: PointerEvent | null = null;
   /** current frame pointer cords */
   lastPointerMoveCoords: { x: number; y: number } | null = null;
+  /**
+   * The pulled-string stabilizer during a freedraw stroke (scene coords): the
+   * brush the stroke follows, and the pointer's last real sample, which the
+   * string is drawn to.
+   */
+  private freedrawStabilizer: {
+    brush: StabilizerPoint;
+    lastSample: (StabilizerPoint & { pressure: number }) | null;
+  } | null = null;
+  /**
+   * While Shift is held during a freedraw stroke, the index of the point the
+   * straight segment starts from: where Shift went down.
+   */
+  private freedrawStraightLineAnchor: number | null = null;
   private lastCompletedCanvasClicks: { x: number; y: number }[] = [];
 
   drawShape = new AppDrawShape(this);
+  handwriting = new AppHandwriting(this);
   laserTrails = new LaserTrails(this);
   eraserTrail = new EraserTrail(this);
   lassoTrail = new LassoTrail(this);
@@ -2408,6 +2466,7 @@ class App extends React.Component<AppProps, AppState> {
             "excalidraw--viewport-status-label":
               !!this.props.viewportStatusFrame?.label,
             "excalidraw--zen-mode": this.state.zenModeEnabled,
+            "excalidraw--warm-mode": this.state.warmModeEnabled,
           },
         )}
         style={{
@@ -2437,6 +2496,7 @@ class App extends React.Component<AppProps, AppState> {
         }
       >
         <ExcalidrawAPIContext.Provider value={this.api}>
+          {this.state.warmModeEnabled && <WarmModeFilters />}
           <AppContext.Provider value={this}>
             <AppPropsContext.Provider value={this.props}>
               <ExcalidrawContainerContext.Provider
@@ -5623,6 +5683,9 @@ class App extends React.Component<AppProps, AppState> {
     if (!this.isInteractionEnabled()) {
       return;
     }
+    if (event.key === "Shift") {
+      this.handwriting.handleShiftUp();
+    }
     if (event.key === KEYS.SPACE) {
       if (
         (this.state.viewModeEnabled &&
@@ -7887,6 +7950,14 @@ class App extends React.Component<AppProps, AppState> {
         pointerDownState.lastCoords.x,
         pointerDownState.lastCoords.y,
       );
+    } else if (this.handwriting.shouldWrite(event)) {
+      // Shift held with draw-to-shape writes: inked like the pencil, read
+      // into text once Shift is let go
+      this.handleFreeDrawElementOnPointerDown(
+        event,
+        "freedraw",
+        pointerDownState,
+      );
     } else if (this.state.activeTool.type === "autoshape") {
       this.drawShape.handlePointerDown(pointerDownState);
     } else if (this.state.activeTool.type === TOOL_TYPE.bucketfill) {
@@ -8282,7 +8353,13 @@ class App extends React.Component<AppProps, AppState> {
       y: gridY,
     });
 
-    const simulatePressure = event.pressure === 0.5;
+    // pens always report real pressure, even if a stroke happens to start at
+    // exactly 0.5 — the constant browsers use for pressure-less pointers
+    const simulatePressure =
+      event.pointerType !== "pen" && event.pressure === 0.5;
+
+    this.freedrawStabilizer = null;
+    this.freedrawStraightLineAnchor = null;
 
     const strokeVariability = this.state.currentItemStrokeVariability;
 
@@ -8315,6 +8392,9 @@ class App extends React.Component<AppProps, AppState> {
     });
 
     this.insertNewElement(element);
+    if (this.handwriting.shouldWrite(event)) {
+      this.handwriting.addStroke(element);
+    }
 
     this.setState((prevState) => {
       const nextSelectedElementIds = {
@@ -8990,8 +9070,23 @@ class App extends React.Component<AppProps, AppState> {
   private onPointerMoveFromPointerDownHandler(
     pointerDownState: PointerDownState,
   ) {
-    return withBatchedUpdatesThrottled((event: PointerEvent) => {
+    // Moves are handled once per frame with only the frame's last event, and
+    // the browser already merges a pen's ~200Hz samples into one event per
+    // frame. Freedraw needs every sample, or fast curves become straight
+    // segments, so each move's coalesced samples are buffered here.
+    const pendingSamples: PointerEvent[] = [];
+
+    const onPointerMove = withBatchedUpdatesThrottled((event: PointerEvent) => {
+      const samples = pendingSamples.splice(0);
       if (this.state.openDialog?.name === "elementLinkSelector") {
+        return;
+      }
+      // A pen that left the tablet moves with no buttons pressed: macOS sends
+      // one such move right before the pointerup, and a lost pointerup leaves
+      // the pen hovering. Never draw in the air. The interaction still ends on
+      // the pointerup or, if that's lost, on the next press — not from here,
+      // since this runs inside the pointerup's flush and would re-enter it.
+      if (event.pointerType === "pen" && event.buttons === 0) {
         return;
       }
       const pointerCoords = viewportCoordsToSceneCoords(event, this.state);
@@ -9089,7 +9184,11 @@ class App extends React.Component<AppProps, AppState> {
         this.laserTrails.addPointToPath(pointerCoords.x, pointerCoords.y);
       }
 
-      if (this.drawShape.handlePointerMove(pointerCoords)) {
+      // a handwriting stroke is drawn as freedraw, not sketched as a shape
+      if (
+        this.state.newElement?.type !== "freedraw" &&
+        this.drawShape.handlePointerMove(pointerCoords)
+      ) {
         return;
       }
 
@@ -9317,23 +9416,140 @@ class App extends React.Component<AppProps, AppState> {
         }
 
         if (newElement.type === "freedraw") {
-          const points = newElement.points;
-          const dx = pointerCoords.x - newElement.x;
-          const dy = pointerCoords.y - newElement.y;
+          const points = [...newElement.points];
+          const pressures = [...newElement.pressures];
+          const stringLength = getStabilizerStringLength(
+            this.state.currentItemFreedrawStabilizer,
+            this.state.zoom.value,
+          );
 
-          const lastPoint = points.length > 0 && points[points.length - 1];
-          const discardPoint =
-            lastPoint && lastPoint[0] === dx && lastPoint[1] === dy;
+          const pushPoint = (coords: StabilizerPoint, pressure: number) => {
+            const dx = coords.x - newElement.x;
+            const dy = coords.y - newElement.y;
 
-          if (!discardPoint) {
-            const pressures = newElement.simulatePressure
-              ? newElement.pressures
-              : [...newElement.pressures, event.pressure];
+            const lastPoint = points[points.length - 1];
+            if (lastPoint && lastPoint[0] === dx && lastPoint[1] === dy) {
+              return;
+            }
+
+            points.push(pointFrom<LocalPoint>(dx, dy));
+            if (!newElement.simulatePressure) {
+              pressures.push(pressure);
+            }
+          };
+
+          // Shift draws a straight segment, like the line tool: from where
+          // Shift went down to the pointer, its angle locked to 15° steps
+          // (with draw-to-shape, Shift is for handwriting instead)
+          if (event.shiftKey && this.state.activeTool.type === "freedraw") {
+            this.freedrawStraightLineAnchor ??= points.length - 1;
+            const anchorIndex = this.freedrawStraightLineAnchor;
+            const anchor = points[anchorIndex];
+            const pointer = viewportCoordsToSceneCoords(event, this.state);
+            const { width, height } = getLockedLinearCursorAlignSize(
+              anchor[0],
+              anchor[1],
+              pointer.x - newElement.x,
+              pointer.y - newElement.y,
+            );
+
+            // redrawn whole each time, replacing the previous straight segment
+            points.length = anchorIndex + 1;
+            if (!newElement.simulatePressure) {
+              pressures.length = anchorIndex + 1;
+            }
+            // as densely as a freehand stroke, so pressure still varies along it
+            const steps = Math.ceil(
+              Math.hypot(width, height) / (2 / this.state.zoom.value),
+            );
+            for (let i = 1; i <= steps; i++) {
+              points.push(
+                pointFrom<LocalPoint>(
+                  anchor[0] + (width * i) / steps,
+                  anchor[1] + (height * i) / steps,
+                ),
+              );
+              if (!newElement.simulatePressure) {
+                pressures.push(event.pressure);
+              }
+            }
 
             this.scene.mutateElement(
               newElement,
+              { points, pressures },
+              { informMutation: false, isDragging: false },
+            );
+
+            // once Shift is let go, the stabilizer picks up from the line's end
+            const end = points[points.length - 1];
+            this.freedrawStabilizer =
+              stringLength > 0
+                ? {
+                    brush: {
+                      x: newElement.x + end[0],
+                      y: newElement.y + end[1],
+                    },
+                    lastSample: null,
+                  }
+                : null;
+            this.setState({ newElement, freedrawStabilizerString: null });
+            return;
+          }
+          this.freedrawStraightLineAnchor = null;
+
+          for (const sample of samples.length ? samples : [event]) {
+            const sampleCoords: StabilizerPoint = viewportCoordsToSceneCoords(
+              sample,
+              this.state,
+            );
+
+            if (stringLength <= 0) {
+              pushPoint(sampleCoords, sample.pressure);
+              continue;
+            }
+
+            // the brush starts where the stroke does
+            this.freedrawStabilizer ??= {
+              brush: {
+                x: newElement.x + newElement.points[0][0],
+                y: newElement.y + newElement.points[0][1],
+              },
+              lastSample: null,
+            };
+            const previous = this.freedrawStabilizer.lastSample ?? {
+              ...this.freedrawStabilizer.brush,
+              pressure: sample.pressure,
+            };
+            this.freedrawStabilizer.lastSample = {
+              ...sampleCoords,
+              pressure: sample.pressure,
+            };
+
+            // pulled along the path between samples, not straight to the
+            // sample, so the brush curves smoothly however far apart they are
+            const path = pullStabilizerBrushAlong(
+              this.freedrawStabilizer.brush,
+              previous,
+              sampleCoords,
+              stringLength,
+              this.state.zoom.value,
+            );
+            for (const brush of path) {
+              pushPoint(
+                brush,
+                previous.pressure +
+                  (sample.pressure - previous.pressure) * brush.t,
+              );
+              this.freedrawStabilizer.brush = { x: brush.x, y: brush.y };
+            }
+          }
+
+          const pointsAdded = points.length > newElement.points.length;
+          if (pointsAdded) {
+            this.scene.mutateElement(
+              newElement,
               {
-                points: [...points, pointFrom<LocalPoint>(dx, dy)],
+                points,
                 pressures,
               },
               {
@@ -9341,7 +9557,22 @@ class App extends React.Component<AppProps, AppState> {
                 isDragging: false,
               },
             );
+          }
 
+          // the string is shown even while slack, when no point is added
+          const stabilizer = stringLength > 0 ? this.freedrawStabilizer : null;
+          if (stabilizer?.lastSample) {
+            this.setState({
+              newElement,
+              freedrawStabilizerString: {
+                brush: { ...stabilizer.brush },
+                pointer: {
+                  x: stabilizer.lastSample.x,
+                  y: stabilizer.lastSample.y,
+                },
+              },
+            });
+          } else if (pointsAdded) {
             this.setState({
               newElement,
             });
@@ -9410,6 +9641,16 @@ class App extends React.Component<AppProps, AppState> {
         pointerDownState,
       );
     }, this.ownerWindow);
+
+    const bufferedOnPointerMove = (event: PointerEvent) => {
+      const coalesced = event.getCoalescedEvents?.();
+      pendingSamples.push(...(coalesced?.length ? coalesced : [event]));
+      onPointerMove(event);
+    };
+    bufferedOnPointerMove.flush = onPointerMove.flush;
+    bufferedOnPointerMove.cancel = onPointerMove.cancel;
+
+    return bufferedOnPointerMove;
   }
 
   // Returns whether the pointer move happened over either scrollbar
@@ -9720,31 +9961,58 @@ class App extends React.Component<AppProps, AppState> {
       );
 
       if (newElement?.type === "freedraw") {
-        const pointerCoords = viewportCoordsToSceneCoords(
-          childEvent,
-          this.state,
-        );
+        // a stabilized stroke ends where the brush is, a string's length
+        // short of the pointer: catching it up would draw a straight tail
+        const stabilizer = this.freedrawStabilizer;
+        this.freedrawStabilizer = null;
+        // a straight segment ends where its locked angle put it
+        const endsStraight = this.freedrawStraightLineAnchor !== null;
+        this.freedrawStraightLineAnchor = null;
 
-        const points = newElement.points;
-        let dx = pointerCoords.x - newElement.x;
-        let dy = pointerCoords.y - newElement.y;
+        // Only a real pointerup ends the stroke where the pointer is. A
+        // cleanup after a lost pointerup gets some later event (a pen
+        // hovering elsewhere, the next pointerdown), and adding its position
+        // would draw a straight line to it. A pen's pointerup can also arrive
+        // late, after the pen already moved in the air, so a pen stroke ends
+        // at its last move sample — unless it's a dot, which needs 2 points.
+        if (
+          childEvent.type === EVENT.POINTER_UP &&
+          (newElement.points.length === 1 ||
+            (childEvent.pointerType !== "pen" && !stabilizer && !endsStraight))
+        ) {
+          // a stabilized dot stays where the brush is, however far the
+          // pointer wandered within the string
+          const pointerCoords = stabilizer
+            ? stabilizer.brush
+            : viewportCoordsToSceneCoords(childEvent, this.state);
 
-        // Allows dots to avoid being flagged as infinitely small
-        if (dx === points[0][0] && dy === points[0][1]) {
-          dy += 0.0001;
-          dx += 0.0001;
+          const points = newElement.points;
+          let dx = pointerCoords.x - newElement.x;
+          let dy = pointerCoords.y - newElement.y;
+
+          // Allows dots to avoid being flagged as infinitely small
+          if (dx === points[0][0] && dy === points[0][1]) {
+            dy += 0.0001;
+            dx += 0.0001;
+          }
+
+          const pressures = newElement.simulatePressure
+            ? []
+            : [...newElement.pressures, childEvent.pressure];
+
+          this.scene.mutateElement(newElement, {
+            points: [...points, pointFrom<LocalPoint>(dx, dy)],
+            pressures,
+          });
         }
 
-        const pressures = newElement.simulatePressure
-          ? []
-          : [...newElement.pressures, childEvent.pressure];
-
-        this.scene.mutateElement(newElement, {
-          points: [...points, pointFrom<LocalPoint>(dx, dy)],
-          pressures,
-        });
-
         this.actionManager.executeAction(actionFinalize);
+
+        // after finalizing, whose app state would otherwise restore the string
+        if (stabilizer) {
+          this.setState({ freedrawStabilizerString: null });
+        }
+        this.handwriting.handleStrokeEnd();
 
         return;
       }

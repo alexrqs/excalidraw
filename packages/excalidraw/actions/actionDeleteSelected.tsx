@@ -1,8 +1,4 @@
-import {
-  KEYS,
-  MOBILE_ACTION_BUTTON_BG,
-  updateActiveTool,
-} from "@excalidraw/common";
+import { KEYS, MOBILE_ACTION_BUTTON_BG } from "@excalidraw/common";
 
 import { getNonDeletedElements } from "@excalidraw/element";
 import { fixBindingsAfterDeletion } from "@excalidraw/element";
@@ -300,9 +296,8 @@ export const actionDeleteSelected = register<{
       elements: nextElements,
       appState: {
         ...nextAppState,
-        activeTool: updateActiveTool(appState, {
-          type: app.state.preferredSelectionTool.type,
-        }),
+        // deleting doesn't take away the tool in use
+        activeTool: appState.activeTool,
         multiElement: null,
         newElement: null,
         activeEmbeddable: null,

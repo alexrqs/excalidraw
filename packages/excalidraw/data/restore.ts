@@ -238,7 +238,7 @@ export const AllowedExcalidrawActiveTools: Record<
   embeddable: true,
   hand: true,
   laser: false,
-  autoshape: false,
+  autoshape: true,
   magicframe: false,
   bucketfill: true,
 };

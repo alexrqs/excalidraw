@@ -78,22 +78,27 @@ const logElementRenderError = (
   );
 };
 
-const GridLineColor = {
+const GridDotColor = {
   [THEME.LIGHT]: {
-    bold: "#dddddd",
-    regular: "#e5e5e5",
+    bold: "#c2c2c2",
+    regular: "#d6d6d6",
   },
   [THEME.DARK]: {
-    bold: applyDarkModeFilter("#dddddd"),
-    regular: applyDarkModeFilter("#e5e5e5"),
+    bold: applyDarkModeFilter("#c2c2c2"),
+    regular: applyDarkModeFilter("#d6d6d6"),
   },
 } as const;
 
+/** dot radii in CSS pixels, the same at any zoom */
+const GRID_DOT_RADIUS = 1;
+const GRID_BOLD_DOT_RADIUS = 1.5;
+
+/** the grid, drawn as a dot at each cell corner */
 const strokeGrid = (
   context: CanvasRenderingContext2D,
   /** grid cell pixel size */
   gridSize: number,
-  /** setting to 1 will disble bold lines */
+  /** every this many cells a corner gets a bolder dot; 1 disables them */
   gridStep: number,
   scrollX: number,
   scrollY: number,
@@ -101,88 +106,42 @@ const strokeGrid = (
   theme: StaticCanvasRenderConfig["theme"],
   width: number,
   height: number,
-  scale: number,
 ) => {
+  // zoomed far out, only bold dots are drawn: the rest would be a haze
+  const regularVisible = gridSize * zoom.value >= 10;
+  if (!regularVisible && gridStep <= 1) {
+    return;
+  }
+
   const offsetX = (scrollX % gridSize) - gridSize;
   const offsetY = (scrollY % gridSize) - gridSize;
+  const isBoldLine = (position: number, scroll: number) =>
+    gridStep > 1 && Math.round(position - scroll) % (gridStep * gridSize) === 0;
 
-  const actualGridSize = gridSize * zoom.value;
+  const radius = GRID_DOT_RADIUS / zoom.value;
+  const boldRadius = GRID_BOLD_DOT_RADIUS / zoom.value;
+  const regularDots = new Path2D();
+  const boldDots = new Path2D();
 
-  const spaceWidth = 1 / zoom.value;
-
-  // scene units → device pixels
-  const devicePixels = zoom.value * scale;
-
-  // A line at least a device pixel wide is drawn a whole number of device
-  // pixels wide and centered to cover them exactly — on the half pixel when
-  // the count is odd. Straddling a pixel boundary renders it as two lighter
-  // pixels, which is how the grid looked at every zoom but 100%. Thinner
-  // lines (zoomed far out) keep their sub-pixel width: their lightness is
-  // the point.
-  const snap = (position: number, maxWidthInCssPixels: number) => {
-    // a line is `min(1 / zoom, max)` scene units wide; computed straight in
-    // device pixels, so `(1 / zoom) × zoom` never lands just under 1
-    const widthInDevicePixels = Math.min(
-      scale,
-      maxWidthInCssPixels * devicePixels,
-    );
-    if (widthInDevicePixels < 1) {
-      return { position, lineWidth: widthInDevicePixels / devicePixels };
+  for (let x = offsetX; x < offsetX + width + gridSize * 2; x += gridSize) {
+    const isBoldX = isBoldLine(x, scrollX);
+    for (let y = offsetY; y < offsetY + height + gridSize * 2; y += gridSize) {
+      const isBold = isBoldX && isBoldLine(y, scrollY);
+      if (isBold) {
+        boldDots.moveTo(x + boldRadius, y);
+        boldDots.arc(x, y, boldRadius, 0, Math.PI * 2);
+      } else if (regularVisible) {
+        regularDots.moveTo(x + radius, y);
+        regularDots.arc(x, y, radius, 0, Math.PI * 2);
+      }
     }
-    const wholeWidth = Math.round(widthInDevicePixels);
-    const center = wholeWidth % 2 ? 0.5 : 0;
-    return {
-      position:
-        (Math.round(position * devicePixels - center) + center) / devicePixels,
-      lineWidth: wholeWidth / devicePixels,
-    };
-  };
+  }
 
   context.save();
-
-  // vertical lines
-  for (let x = offsetX; x < offsetX + width + gridSize * 2; x += gridSize) {
-    const isBold =
-      gridStep > 1 && Math.round(x - scrollX) % (gridStep * gridSize) === 0;
-    // don't render regular lines when zoomed out and they're barely visible
-    if (!isBold && actualGridSize < 10) {
-      continue;
-    }
-
-    const { position, lineWidth } = snap(x, isBold ? 4 : 1);
-    context.lineWidth = lineWidth;
-    const lineDash = [lineWidth * 3, spaceWidth + (lineWidth + spaceWidth)];
-
-    context.beginPath();
-    context.setLineDash(isBold ? [] : lineDash);
-    context.strokeStyle = isBold
-      ? GridLineColor[theme].bold
-      : GridLineColor[theme].regular;
-    context.moveTo(position, offsetY - gridSize);
-    context.lineTo(position, Math.ceil(offsetY + height + gridSize * 2));
-    context.stroke();
-  }
-
-  for (let y = offsetY; y < offsetY + height + gridSize * 2; y += gridSize) {
-    const isBold =
-      gridStep > 1 && Math.round(y - scrollY) % (gridStep * gridSize) === 0;
-    if (!isBold && actualGridSize < 10) {
-      continue;
-    }
-
-    const { position, lineWidth } = snap(y, isBold ? 4 : 1);
-    context.lineWidth = lineWidth;
-    const lineDash = [lineWidth * 3, spaceWidth + (lineWidth + spaceWidth)];
-
-    context.beginPath();
-    context.setLineDash(isBold ? [] : lineDash);
-    context.strokeStyle = isBold
-      ? GridLineColor[theme].bold
-      : GridLineColor[theme].regular;
-    context.moveTo(offsetX - gridSize, position);
-    context.lineTo(Math.ceil(offsetX + width + gridSize * 2), position);
-    context.stroke();
-  }
+  context.fillStyle = GridDotColor[theme].regular;
+  context.fill(regularDots);
+  context.fillStyle = GridDotColor[theme].bold;
+  context.fill(boldDots);
   context.restore();
 };
 
@@ -380,7 +339,6 @@ const _renderStaticScene = ({
       renderConfig.theme,
       normalizedWidth / appState.zoom.value,
       normalizedHeight / appState.zoom.value,
-      scale,
     );
   }
 

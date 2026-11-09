@@ -1264,9 +1264,156 @@ export const toggleLinePolygonState = (
 
 // NOTE not cached (-> for SVG export)
 const getFreeDrawSvgPath = (element: ExcalidrawFreeDrawElement) => {
+  if (element.strokeStyle !== "solid" && element.points.length > 1) {
+    return getBrokenFreedrawSvgPath(element) as SVGPathString;
+  }
   return getSvgPathFromStroke(
     getFreedrawOutlinePoints(element),
   ) as SVGPathString;
+};
+
+/**
+ * Dash and gap lengths, and dot spacing, in multiples of the stroke's radius
+ * at mid pressure. Each dash's round caps reach a radius past its ends, so a
+ * dash looks 2 radii longer, and a gap 2 radii shorter, than measured here.
+ */
+const FREEDRAW_DASH_LENGTH = 3;
+const FREEDRAW_DASH_GAP = 5;
+const FREEDRAW_DOT_SPACING = 3.5;
+const FREEDRAW_DASH_SIZE_SCALE = 0.8;
+/** Dots are drawn a bit smaller than the stroke, or they read as a line. */
+const FREEDRAW_DOT_SCALE = 0.8;
+
+/**
+ * The perfect-freehand settings a dash is outlined with, and the radius the
+ * stroke has at a pressure — matching the solid stroke of the same element.
+ */
+const getFreedrawPieceStyle = (element: ExcalidrawFreeDrawElement) => {
+  if (element.strokeOptions?.variability === "constant") {
+    const radius = element.strokeWidth * CONSTANT_WIDTH_FREEDRAW.SIZE_FACTOR;
+    return {
+      options: {
+        size: radius * 2,
+        thinning: 0,
+        smoothing: VARIABLE_WIDTH_FREEDRAW.SMOOTHING,
+        easing: (t: number) => t,
+      },
+      radiusAt: () => radius,
+    };
+  }
+
+  const size = element.strokeWidth * VARIABLE_WIDTH_FREEDRAW.SIZE_FACTOR;
+  const easing = (t: number) => Math.sin((t * Math.PI) / 2);
+  return {
+    options: {
+      size,
+      thinning: VARIABLE_WIDTH_FREEDRAW.THINNING,
+      smoothing: VARIABLE_WIDTH_FREEDRAW.SMOOTHING,
+      easing,
+    },
+    // perfect-freehand's own stroke radius for a pressure
+    radiusAt: (pressure: number) =>
+      size * easing(0.5 - VARIABLE_WIDTH_FREEDRAW.THINNING * (0.5 - pressure)),
+  };
+};
+
+/**
+ * A dashed or dotted freedraw stroke: its centerline cut by length into
+ * dashes, each outlined as a short stroke of its own so it keeps the pen's
+ * pressure and round ends, or into dots sized by the pressure under them.
+ */
+const getBrokenFreedrawSvgPath = (element: ExcalidrawFreeDrawElement) => {
+  const samples: [number, number, number][] = element.simulatePressure
+    ? element.points.map(([x, y]) => [x, y, 0.5])
+    : interpolateFreedrawSamples(element.points, element.pressures);
+  const { options, radiusAt } = getFreedrawPieceStyle(element);
+  const unit = radiusAt(0.5);
+
+  const lerp = (
+    a: [number, number, number],
+    b: [number, number, number],
+    t: number,
+  ): [number, number, number] => [
+    a[0] + (b[0] - a[0]) * t,
+    a[1] + (b[1] - a[1]) * t,
+    a[2] + (b[2] - a[2]) * t,
+  ];
+
+  // the points every `lengths[i]` along the centerline, alternating lengths
+  const walk = (
+    lengths: number[],
+    onCut: (point: [number, number, number], index: number) => void,
+    onSample: (point: [number, number, number]) => void,
+  ) => {
+    let index = 0;
+    let left = lengths[0];
+    for (let i = 1; i < samples.length; i++) {
+      let from = samples[i - 1];
+      const to = samples[i];
+      let segment = Math.hypot(to[0] - from[0], to[1] - from[1]);
+      while (segment >= left) {
+        const cut = lerp(from, to, left / segment);
+        onCut(cut, index);
+        segment -= left;
+        from = cut;
+        index++;
+        left = lengths[index % lengths.length];
+      }
+      left -= segment;
+      onSample(to);
+    }
+  };
+
+  if (element.strokeStyle === "dotted") {
+    const circle = ([x, y, pressure]: [number, number, number]) => {
+      const r = radiusAt(pressure) * FREEDRAW_DOT_SCALE;
+      return `M${x - r},${y}a${r},${r} 0 1,0 ${r * 2},0a${r},${r} 0 1,0 ${
+        -r * 2
+      },0Z`;
+    };
+    const dots = [circle(samples[0])];
+    walk(
+      [unit * FREEDRAW_DOT_SPACING],
+      (point) => dots.push(circle(point)),
+      () => {},
+    );
+    return dots.join("").replace(TO_FIXED_PRECISION, "$1");
+  }
+
+  const dashes: [number, number, number][][] = [];
+  let dash: [number, number, number][] | null = [samples[0]];
+  walk(
+    [unit * FREEDRAW_DASH_LENGTH, unit * FREEDRAW_DASH_GAP],
+    (point, index) => {
+      // even cuts end a dash, odd ones start the next
+      if (index % 2 === 0) {
+        dash!.push(point);
+        dashes.push(dash!);
+        dash = null;
+      } else {
+        dash = [point];
+      }
+    },
+    (point) => dash?.push(point),
+  );
+  if (dash) {
+    dashes.push(dash);
+  }
+
+  return dashes
+    .map((piece) =>
+      getSvgPathFromStroke(
+        getStroke(piece, {
+          ...options,
+          // tuned by eye: outlined on its own, a dash comes out ~20% wider
+          // than the same stretch of the solid stroke
+          size: options.size * FREEDRAW_DASH_SIZE_SCALE,
+          simulatePressure: false,
+          last: true,
+        }) as number[][],
+      ),
+    )
+    .join(" ");
 };
 
 /**
@@ -1297,6 +1444,80 @@ const getFreedrawStreamline = (element: ExcalidrawFreeDrawElement) =>
   element.strokeOptions?.streamline ?? DEFAULT_STROKE_STREAMLINE;
 
 /**
+ * Spacing (px) of the points the spline adds between two pen samples, and the
+ * most it adds per gap — enough for the fastest strokes at ~60 samples/s.
+ */
+const FREEDRAW_SPLINE_STEP = 2;
+const FREEDRAW_SPLINE_MAX_STEPS = 12;
+
+/**
+ * A pen reports only as many samples as the display refreshes (~60/s on a
+ * 60Hz screen, as macOS delivers them), so a fast curve arrives as a few
+ * far-apart points and would render as a polygon. A centripetal Catmull-Rom
+ * spline fits the curve through those samples — unlike the uniform variant it
+ * neither overshoots nor loops when the spacing is uneven — and pressure is
+ * interpolated linearly along each gap.
+ */
+const interpolateFreedrawSamples = (
+  points: readonly (readonly [number, number])[],
+  pressures: readonly number[],
+): [number, number, number][] => {
+  const pressureAt = (i: number) => pressures[i] ?? 0.5;
+
+  if (points.length < 3) {
+    return points.map(([x, y], i) => [x, y, pressureAt(i)]);
+  }
+
+  // the knot spacing of a centripetal spline: the square root of the distance
+  // (offset so coincident samples don't divide by zero)
+  const knot = (a: readonly number[], b: readonly number[]) =>
+    Math.sqrt(Math.hypot(b[0] - a[0], b[1] - a[1])) + 1e-4;
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+  const last = points.length - 1;
+  const result: [number, number, number][] = [];
+
+  for (let i = 0; i < last; i++) {
+    const p0 = points[Math.max(i - 1, 0)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(i + 2, last)];
+
+    const t1 = knot(p0, p1);
+    const t2 = t1 + knot(p1, p2);
+    const t3 = t2 + knot(p2, p3);
+
+    const steps = Math.min(
+      FREEDRAW_SPLINE_MAX_STEPS,
+      Math.max(
+        1,
+        Math.ceil(
+          Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / FREEDRAW_SPLINE_STEP,
+        ),
+      ),
+    );
+
+    for (let step = 0; step < steps; step++) {
+      const t = lerp(t1, t2, step / steps);
+      // Barry–Goldman pyramid evaluation of the segment between p1 and p2
+      const [x, y] = [0, 1].map((axis) => {
+        const a1 = lerp(p0[axis], p1[axis], t / t1);
+        const a2 = lerp(p1[axis], p2[axis], (t - t1) / (t2 - t1));
+        const a3 = lerp(p2[axis], p3[axis], (t - t2) / (t3 - t2));
+        const b1 = lerp(a1, a2, t / t2);
+        const b2 = lerp(a2, a3, (t - t1) / (t3 - t1));
+        return lerp(b1, b2, (t - t1) / (t2 - t1));
+      });
+      result.push([x, y, lerp(pressureAt(i), pressureAt(i + 1), step / steps)]);
+    }
+  }
+
+  result.push([points[last][0], points[last][1], pressureAt(last)]);
+
+  return result;
+};
+
+/**
  * Pressure-sensitive (variable width) freedraw outline, rendered with
  * perfect-freehand. This is the original Excalidraw freedraw look.
  */
@@ -1304,12 +1525,13 @@ const getVariableWidthFreedrawOutline = (
   element: ExcalidrawFreeDrawElement,
 ): [number, number][] => {
   // If input points are empty (should they ever be?) return a dot
+  // real-pressure (pen) strokes get the spline: their samples are sparse,
+  // while simulated-pressure (mouse) strokes keep their raw points, since
+  // perfect-freehand derives their pressure from the spacing between points
   const inputPoints = element.simulatePressure
     ? element.points
     : element.points.length
-    ? element.points.map(
-        ([x, y], i) => [x, y, element.pressures[i]] as [number, number, number],
-      )
+    ? interpolateFreedrawSamples(element.points, element.pressures)
     : [[0, 0, 0.5]];
 
   return getStroke(inputPoints as number[][], {
